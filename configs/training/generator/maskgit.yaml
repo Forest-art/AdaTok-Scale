@@ -1,0 +1,90 @@
+experiment:
+    project: "titok_generation"
+    name: "titok_s128_maskgit_sft"
+    output_dir: "exp/titok_s128_maskgit_sft"
+    max_train_examples: 1_281_167
+    save_every: 10_000
+    eval_every: 100000
+    generate_every: 1000000
+    log_every: 50
+    log_grad_norm_every: 1_000
+    resume: False
+    tokenizer_checkpoint: "./pretrained_models/tokenizer_titok_s128.bin"   # ./pretrained_models/tokenizer_titok_s128_imagenet.bin
+ 
+model:
+    vq_model:
+        codebook_size: 4096
+        token_size: 12
+        use_l2_norm: True
+        commitment_cost: 0.25
+        # vit arch
+        vit_enc_model_size: "small"
+        vit_dec_model_size: "small"
+        vit_enc_patch_size: 16
+        vit_dec_patch_size: 16
+        num_latent_tokens: 128
+        finetune_decoder: True
+    
+    generator:
+        model_type: "EntropyUViT"
+        hidden_size: 1024
+        num_hidden_layers: 20
+        num_attention_heads: 16
+        intermediate_size: 4096
+        dropout: 0.1
+        attn_drop: 0.1
+        num_steps: 8
+        class_label_dropout: 0.1
+        image_seq_len: ${model.vq_model.num_latent_tokens}
+        condition_num_classes: 1000
+
+        # sampling hyper-params on the flight
+        randomize_temperature: 1.0
+        guidance_scale: 4.5
+        guidance_decay: "constant"
+
+losses:
+    label_smoothing: 0.1
+    loss_weight_unmasked_token: 0.1
+
+dataset:
+  train:
+    target: data.imagenet.ImageNetDataset
+    params:
+      root: "/mnt/hwfile/ai4earth/wangzidong/datasets/imagenet1k/images/"
+      mode: "train"
+      image_size: 256
+  val:
+    target: data.imagenet.ImageNetDataset
+    params:
+      root: "/mnt/hwfile/ai4earth/wangzidong/datasets/imagenet1k/images/"
+      mode: "val"
+      image_size: 256
+
+optimizer:
+    name: adamw 
+    params:
+        learning_rate: 2e-4
+        beta1: 0.9
+        beta2: 0.96
+        weight_decay: 0.03
+
+
+lr_scheduler:
+    scheduler: "cosine"
+    params:
+        learning_rate: ${optimizer.params.learning_rate}
+        warmup_steps: 10_000
+        end_lr: 1e-5
+
+
+training:
+    gradient_accumulation_steps: 1
+    per_gpu_batch_size: 32 # 32 GPU, total batch size 2048
+    mixed_precision: "bf16"
+    enable_tf32: True
+    enable_wandb: True
+    use_ema: True
+    seed: 42
+    max_train_steps: 10_000
+    max_grad_norm: 1.0
